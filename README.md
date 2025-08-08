@@ -1,6 +1,6 @@
 
 <h1 style="font-family: Arial, sans-serif; font-size: 36px; color: #4A90E2; display: flex; align-items: center; border-bottom: 3px solid #4A90E2; padding-bottom: 5px;">
-    <img src="screenshots/icon.png" alt="Wardi Icon" style="width: 50px; height: 50px; margin-right: 15px;">
+    <img src="screenshots/Icon.png" alt="Wardi Icon" style="width: 50px; height: 50px; margin-right: 15px;">
     Waldo Finder! 🌟
 </h1>
 Waldo Solver is a fast, privacy-first, AI-powered desktop app that helps you find Waldo in images using advanced computer vision models. Built for speed, simplicity, and local intelligence.
