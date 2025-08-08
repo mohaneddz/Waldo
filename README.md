@@ -143,9 +143,6 @@ BY SPENDING DAYS OF MY LIFE SOLVING A KIDS BOOK SERIES
 │   ├── routes/            # Application pages.
 │   ├── utils/             # Utility functions.
 │   └── main.tsx           # Application entry point.
-├── backend/               # Python backend (AI models).
-│   ├── detect.py          # Waldo detection logic.
-│   └── ...                # Other backend files.
 └── src-tauri/             # Tauri integration (Rust backend).
 ```
 
@@ -165,21 +162,6 @@ BY SPENDING DAYS OF MY LIFE SOLVING A KIDS BOOK SERIES
 
 3. **Use the installer:**
     - From the releases section on windows, for other installers you can build on your machine.
-
-4. **Start the Backend:**  
-   ```sh
-   python backend/detect.py
-   ```
-
-5. **Start the Frontend (Dev):**  
-   ```sh
-   npm run dev
-   ```
-
-6. **Build Desktop App:**  
-   ```sh
-   npm run tauri build
-   ```
 
 ---
 
