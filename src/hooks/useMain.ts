@@ -1,161 +1,134 @@
-import { useLocation } from '@solidjs/router';
-import { onMount, createSignal } from 'solid-js';
-import { invoke } from '@tauri-apps/api/core';
-import { open } from '@tauri-apps/plugin-dialog';
-import { getStoreValue } from '@/utils/store';
+import { useLocation } from "@solidjs/router";
+import { onCleanup, onMount, createSignal } from "solid-js";
+import { open } from "@tauri-apps/plugin-dialog";
 
-// Detection type
-interface Coord {
-  class: string;
-  confidence: number;
-  bbox: [number, number, number, number];
-}
+import { createObjectUrlFromPath } from "@/utils/image";
+import {
+  loadModel,
+  resetModel,
+  runInference,
+  type DevicePreference,
+  type Detection,
+  type RuntimeDevice,
+} from "@/services/inference";
+import { loadAppSettings } from "@/utils/settings";
 
 export default function useMain() {
   const location = useLocation();
-  const [img, setImg] = createSignal<string>('');
-  const [imgPath, setImgPath] = createSignal<string>('');
-  const [boxes, setBoxes] = createSignal<Coord[]>([]);
-  const [state, setState] = createSignal<string>('ready');
+  const [img, setImg] = createSignal("");
+  const [imgPath, setImgPath] = createSignal("");
+  const [boxes, setBoxes] = createSignal<Detection[]>([]);
+  const [state, setState] = createSignal("ready");
   const [highlight, setHighlight] = createSignal(false);
   const [timeout, setTimeout] = createSignal(10);
+  const [inferenceDevice, setInferenceDevice] =
+    createSignal<DevicePreference>("auto");
+  const [deviceUsed, setDeviceUsed] = createSignal<RuntimeDevice | null>(null);
+  const [lastResultPath, setLastResultPath] = createSignal("");
 
-  const INFER_URL = 'http://localhost:8000/infer';
-
-  async function inferOnce(ms: number) {
-    const controller = new AbortController();
-    const timerId = globalThis.setTimeout(() => {
-      controller.abort();
-      setState('long'); // show that it's taking long
-    }, ms);
-
-    try {
-      const response = await fetch(INFER_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: imgPath() }),
-        signal: controller.signal,
-      });
-      return response;
-    } finally {
-      globalThis.clearTimeout(timerId);
-    }
-  }
-
-  async function restartServer() {
-    try {
-      await invoke('restart_server');
-      // console.log('Server restarted successfully');
-    } catch (error) {
-      console.error('Failed to restart server:', error);
-    }
-  }
   function handleGoBack() {
     window.history.back();
   }
 
-  function handleFindWaldo() {
-    sendImg();
-    // console.log('Finding Waldo...');
+  async function handleFindWaldo() {
+    await sendImg();
   }
 
   onMount(async () => {
-    // Start the backend server as soon as the component loads.
-
     const stateObj = location.state;
-    if (!stateObj || typeof stateObj !== 'object' || !('path' in stateObj)) {
-      console.error('Invalid state object:', stateObj);
+    if (!stateObj || typeof stateObj !== "object" || !("path" in stateObj)) {
+      console.error("Invalid state object:", stateObj);
       return;
     }
+
     const path = (stateObj as { path: string }).path;
-    const timeoutValue = await getStoreValue('timeout');
-    if (typeof timeoutValue === 'number') {
-      setTimeout(timeoutValue);
-    }
+    const settings = await loadAppSettings();
+    setTimeout(settings.timeout);
+    setInferenceDevice(settings.inferenceDevice);
+
     await loadImage(path);
+  });
+
+  onCleanup(() => {
+    const current = img();
+    if (current.startsWith("blob:")) {
+      URL.revokeObjectURL(current);
+    }
   });
 
   async function loadImage(path: string) {
     setImgPath(path);
-    const data = await invoke('read_img', { path });
-    if (typeof data === 'string') setImg(data);
+    const preview = await createObjectUrlFromPath(path);
+    const current = img();
+    if (current.startsWith("blob:")) {
+      URL.revokeObjectURL(current);
+    }
+    setImg(preview);
     setBoxes([]);
-    setState('ready');
+    setState("ready");
+    setLastResultPath("");
   }
 
   async function pickNewPicture() {
     const file = await open({
       multiple: false,
       directory: false,
-      filters: [{ name: 'Images', extensions: ['png', 'jpeg', 'jpg'] }],
+      filters: [{ name: "Images", extensions: ["png", "jpeg", "jpg"] }],
     });
     if (!file || Array.isArray(file)) return;
     await loadImage(file as string);
     setHighlight(false);
   }
 
+  async function reloadModel() {
+    const settings = await loadAppSettings();
+    setTimeout(settings.timeout);
+    setInferenceDevice(settings.inferenceDevice);
+    await resetModel();
+    const runtimeDevice = await loadModel(settings.inferenceDevice);
+    setDeviceUsed(runtimeDevice);
+  }
+
   async function sendImg() {
     if (!imgPath()) {
-      console.error('No image path to send');
-      setState('error');
+      console.error("No image path to send");
+      setState("error");
       return;
     }
-    
-    // No longer need to call ensureServer() here.
-    // The server is started onMount, and the retry logic below will handle restarts if it crashes.
 
-    let ms = (timeout() ?? 10) * 1000;
-    let attempt = 0;
-    const maxAttempts = 2;
+    setState("ready");
+    setBoxes([]);
+    setLastResultPath("");
 
-    while (attempt < maxAttempts) {
-      try {
-        const response = await inferOnce(ms);
+    const settings = await loadAppSettings();
+    setTimeout(settings.timeout);
+    setInferenceDevice(settings.inferenceDevice);
 
-        if (!response.ok) {
-          const text = await response.text();
-          throw new Error(`HTTP ${response.status}: ${text}`);
-        }
+    const timerId = globalThis.setTimeout(() => {
+      setState("long");
+    }, settings.timeout * 1000);
 
-        const data = await response.json();
+    try {
+      const result = await runInference(imgPath(), {
+        devicePreference: settings.inferenceDevice,
+        saveLocation: settings.saveLocation,
+      });
 
-        if (data && Array.isArray(data.detections)) {
-          if (data.detections.length > 0) {
-            setBoxes(data.detections as Coord[]);
-            setState('done');
-          } else {
-            console.warn('No detections found');
-            setBoxes([]);
-            setState('failed');
-          }
-        } else {
-          console.error('Empty or invalid response from server');
-          setState('error');
-        }
-        return; // success, stop retrying
-      } catch (err: any) {
-        if (err?.name === 'AbortError') {
-          console.warn(`Request aborted due to timeout (attempt ${attempt + 1})`);
-          // On first timeout, try restarting the server and retry once with a longer timeout
-          attempt += 1;
-          if (attempt < maxAttempts) {
-            await restartServer(); // Use the corrected restart function
-            ms = Math.min(ms * 2, 600_000); // cap at 10 minutes
-            continue;
-          }
-          // After final timeout, keep 'long' state set earlier and stop
-          return;
-        }
+      setDeviceUsed(result.deviceUsed);
+      setLastResultPath(result.annotatedImagePath);
 
-        console.error(`Failed to send image (attempt ${attempt + 1}):`, err);
-        attempt += 1;
-        if (attempt < maxAttempts) {
-          await restartServer(); // Use the corrected restart function
-          continue;
-        }
-        setState('error');
-        return;
+      if (result.detections.length > 0) {
+        setBoxes(result.detections);
+        setState("done");
+      } else {
+        setBoxes([]);
+        setState("failed");
       }
+    } catch (error) {
+      console.error("Failed to run inference:", error);
+      setState("error");
+    } finally {
+      globalThis.clearTimeout(timerId);
     }
   }
 
@@ -169,6 +142,8 @@ export default function useMain() {
     pickNewPicture,
     highlight,
     setHighlight,
-    restartServer,
+    reloadModel,
+    deviceUsed,
+    lastResultPath,
   };
 }

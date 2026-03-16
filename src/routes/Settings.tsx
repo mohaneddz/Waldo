@@ -3,18 +3,25 @@ import useSettings from "@/hooks/useSettings";
 import NumberInput from "@/components/NumberInput";
 import TextInput from "@/components/TextInput";
 
-import { createSignal } from "solid-js";
+import { Show, createSignal } from "solid-js";
 
-export default function About() {
+export default function Settings() {
   const {
     handleGoBack: goBackOriginal,
     saveSettings,
     autoStart,
     setAutoStart,
-    timeout,
-    setTimeout,
+    timeoutInput,
+    setTimeoutInput,
     saveLocation,
-    setSaveLocation
+    setSaveLocation,
+    inferenceDevice,
+    setInferenceDevice,
+    pickSaveLocation,
+    resetSaveLocation,
+    loading,
+    errorMessage,
+    successMessage,
   } = useSettings();
 
   const [saving, setSaving] = createSignal(false);
@@ -48,15 +55,31 @@ export default function About() {
         <div class="center flex-col gap-12 h-full w-full max-w-[30vw]">
           {/* AutoStart as Select */}
           <div class="flex justify-between items-center w-full">
-            <label for="autoStart">AI AutoStart</label>
+            <label for="autoStart">Preload model</label>
             <select
               id="autoStart"
               class="w-50 text-sm pl-4 pr-4 py-2 bg-primary-light/40 border border-border-light-2 rounded-md text-white placeholder-white/70 focus:outline-none focus:border-accent"
               value={autoStart() ? "enabled" : "disabled"}
               onChange={(e) => setAutoStart(e.currentTarget.value === "enabled")}
+              disabled={loading() || saving()}
             >
               <option value="enabled">Enabled</option>
               <option value="disabled">Disabled</option>
+            </select>
+          </div>
+
+          <div class="flex justify-between items-center w-full">
+            <label for="inferenceDevice">Inference device</label>
+            <select
+              id="inferenceDevice"
+              class="w-50 text-sm pl-4 pr-4 py-2 bg-primary-light/40 border border-border-light-2 rounded-md text-white placeholder-white/70 focus:outline-none focus:border-accent"
+              value={inferenceDevice()}
+              onChange={(e) => setInferenceDevice(e.currentTarget.value as "auto" | "gpu" | "cpu")}
+              disabled={loading() || saving()}
+            >
+              <option value="auto">Auto (GPU if available)</option>
+              <option value="gpu">GPU only</option>
+              <option value="cpu">CPU only</option>
             </select>
           </div>
 
@@ -64,25 +87,56 @@ export default function About() {
           <div class="flex justify-between items-center w-full">
             <label for="timeout">Timeout</label>
             <NumberInput
-              number={timeout().toString()}
-              setNumber={(value) => setTimeout(Number(value))}
+              number={timeoutInput()}
+              setNumber={setTimeoutInput}
               id="timeout"
               placeholder="Enter timeout in seconds"
-              readonly={false}
+              readonly={loading() || saving()}
             />
           </div>
 
           {/* Save Location */}
-          <div class="flex justify-between items-center w-full">
+          <div class="flex justify-between items-start w-full gap-4">
             <label for="saveLocation">Save location</label>
-            <TextInput
-              text={saveLocation()}
-              setText={(value) => setSaveLocation(value)}
-              id="saveLocation"
-              placeholder="Enter save location"
-              readonly={false}
-            />
+            <div class="flex-1 space-y-3">
+              <TextInput
+                class="w-full"
+                text={saveLocation()}
+                setText={setSaveLocation}
+                id="saveLocation"
+                placeholder="Choose or enter a save location"
+                readonly={loading() || saving()}
+              />
+              <div class="flex gap-3">
+                <Button
+                  variant="ghost"
+                  onClick={pickSaveLocation}
+                  disabled={loading() || saving()}
+                >
+                  Browse
+                </Button>
+                <Button
+                  variant="ghost"
+                  onClick={resetSaveLocation}
+                  disabled={loading() || saving()}
+                >
+                  Use Default
+                </Button>
+              </div>
+              <p class="text-xs text-white/70">
+                Save folders must stay inside Downloads, Documents, Desktop, Pictures, Public, Home, Temp, App Data, or App Local Data.
+              </p>
+            </div>
           </div>
+        </div>
+
+        <div class="mt-6 min-h-6 text-center">
+          <Show when={errorMessage()}>
+            <p class="text-sm text-red-300">{errorMessage()}</p>
+          </Show>
+          <Show when={!errorMessage() && successMessage()}>
+            <p class="text-sm text-emerald-300">{successMessage()}</p>
+          </Show>
         </div>
 
         {/* Buttons */}
@@ -90,7 +144,7 @@ export default function About() {
           <Button class="w-full " variant="ghost" onClick={handleGoBack} disabled={saving()}>
             Go Back
           </Button>
-          <Button class="w-full" variant="primary" onClick={handleSave} disabled={saving()}>
+          <Button class="w-full" variant="primary" onClick={handleSave} disabled={saving() || loading()}>
             {saving() ? (
               <span class="flex items-center justify-center gap-2">
                 <span

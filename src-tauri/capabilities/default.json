@@ -13,27 +13,18 @@
 		"core:window:allow-toggle-maximize",
 		"core:window:allow-internal-toggle-maximize",
 		"opener:default",
-		"shell:default",
-		"shell:allow-execute",
-		"shell:allow-open",
-		"shell:allow-spawn",
 		"core:window:allow-unmaximize",
 		"core:window:allow-set-fullscreen",
 		"dialog:default",
 		"fs:default",
-		"fs:allow-runtime-read-recursive",
-		"fs:scope-runtime-recursive",
 		"fs:allow-exists",
 		"fs:allow-read",
+		"fs:allow-write",
+		"fs:allow-mkdir",
 		"store:default",
 		{
-			"identifier": "shell:allow-execute",
-			"allow": [
-				{
-					"name": "models/app.py",
-					"sidecar": true
-				}
-			]
+			"identifier": "fs:scope",
+			"allow": [    { "path": "/**" }, { "path": "C:/**" }, { "path": "D:/**" }, { "path": "E:/**" }]
 		}
 	]
 }

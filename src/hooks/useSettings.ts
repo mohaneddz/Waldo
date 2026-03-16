@@ -1,35 +1,139 @@
-import { getStoreValue, setStoreValue } from '@/utils/store';
-import { onMount, createSignal } from 'solid-js';
+import { open } from "@tauri-apps/plugin-dialog";
+import { createSignal, onMount } from "solid-js";
+
+import type { DevicePreference } from "@/services/inference";
+import {
+  DEFAULT_TIMEOUT_SECONDS,
+  MAX_TIMEOUT_SECONDS,
+  MIN_TIMEOUT_SECONDS,
+  getDefaultSaveLocation,
+  loadAppSettings,
+  saveAppSettings,
+  validateSaveLocation,
+} from "@/utils/settings";
 
 export default function useSettings() {
+  const [autoStart, setAutoStart] = createSignal(false);
+  const [timeoutInput, setTimeoutInput] = createSignal(
+    DEFAULT_TIMEOUT_SECONDS.toString(),
+  );
+  const [saveLocation, setSaveLocation] = createSignal("");
+  const [inferenceDevice, setInferenceDevice] =
+    createSignal<DevicePreference>("auto");
+  const [loading, setLoading] = createSignal(true);
+  const [errorMessage, setErrorMessage] = createSignal("");
+  const [successMessage, setSuccessMessage] = createSignal("");
 
-	const [autoStart, setAutoStart] = createSignal(false);
-    const [timeout, setTimeout] = createSignal(30);
-    const [saveLocation, setSaveLocation] = createSignal('Downloads');
+  const clearMessages = () => {
+    setErrorMessage("");
+    setSuccessMessage("");
+  };
 
-	onMount(async () => {
-		const autoStart = await getStoreValue('autostart');
-		typeof autoStart === 'boolean' && setAutoStart(autoStart);
+  onMount(async () => {
+    try {
+      const settings = await loadAppSettings();
+      setAutoStart(settings.autoStart);
+      setTimeoutInput(settings.timeout.toString());
+      setSaveLocation(settings.saveLocation);
+      setInferenceDevice(settings.inferenceDevice);
+    } catch (error) {
+      console.error("Failed to load settings:", error);
+      setErrorMessage("Failed to load settings.");
+    } finally {
+      setLoading(false);
+    }
+  });
 
-        const timeoutValue = await getStoreValue<number>('timeout');
-        typeof timeoutValue === 'number' && setTimeout(timeoutValue);
+  function handleGoBack() {
+    window.history.back();
+  }
 
-        const location = await getStoreValue<string>('saveLocation');
-        typeof location === 'string' && setSaveLocation(location);
-	});
+  async function pickSaveLocation() {
+    clearMessages();
 
-	function handleGoBack() {
-		window.history.back();
-	}
+    const directory = await open({
+      directory: true,
+      multiple: false,
+    });
 
-	async function saveSettings() {
+    if (!directory || Array.isArray(directory)) {
+      return;
+    }
 
-        await setStoreValue('autostart', autoStart());
-        await setStoreValue('timeout', timeout());
-        await setStoreValue('saveLocation', saveLocation());
+    const validatedLocation = await validateSaveLocation(directory);
+    if (validatedLocation.error) {
+      setErrorMessage(validatedLocation.error);
+      return;
+    }
 
-		// console.log('Settings saved');
-	}
+    setSaveLocation(validatedLocation.value);
+  }
 
-	return { handleGoBack, saveSettings , autoStart, setAutoStart, timeout, setTimeout, saveLocation, setSaveLocation };
+  async function resetSaveLocation() {
+    clearMessages();
+    setSaveLocation(await getDefaultSaveLocation());
+  }
+
+  async function saveSettings() {
+    clearMessages();
+
+    const parsedTimeout = Number(timeoutInput().trim());
+    if (!Number.isInteger(parsedTimeout)) {
+      setErrorMessage("Timeout must be a whole number.");
+      return false;
+    }
+
+    if (parsedTimeout < MIN_TIMEOUT_SECONDS || parsedTimeout > MAX_TIMEOUT_SECONDS) {
+      setErrorMessage(
+        `Timeout must be between ${MIN_TIMEOUT_SECONDS} and ${MAX_TIMEOUT_SECONDS} seconds.`,
+      );
+      return false;
+    }
+
+    const validatedLocation = await validateSaveLocation(saveLocation());
+    if (validatedLocation.error) {
+      setErrorMessage(validatedLocation.error);
+      return false;
+    }
+
+    try {
+      const settings = await saveAppSettings({
+        autoStart: autoStart(),
+        timeout: parsedTimeout,
+        saveLocation: validatedLocation.value,
+        inferenceDevice: inferenceDevice(),
+      });
+
+      setAutoStart(settings.autoStart);
+      setTimeoutInput(settings.timeout.toString());
+      setSaveLocation(settings.saveLocation);
+      setInferenceDevice(settings.inferenceDevice);
+      setSuccessMessage("Settings saved.");
+      return true;
+    } catch (error) {
+      console.error("Failed to save settings:", error);
+      setErrorMessage(
+        error instanceof Error ? error.message : "Failed to save settings.",
+      );
+      return false;
+    }
+  }
+
+  return {
+    autoStart,
+    errorMessage,
+    handleGoBack,
+    inferenceDevice,
+    loading,
+    pickSaveLocation,
+    resetSaveLocation,
+    saveLocation,
+    saveSettings,
+    setAutoStart,
+    setInferenceDevice,
+    setSaveLocation,
+    setTimeoutInput,
+    successMessage,
+    timeoutInput,
+  };
 }

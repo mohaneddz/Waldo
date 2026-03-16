@@ -15,8 +15,10 @@ export default function Main() {
     state,
     highlight,
     setHighlight,
-    restartServer,
+    reloadModel,
     pickNewPicture,
+    deviceUsed,
+    lastResultPath,
   } = useMain();
 
   const [isFinding, setIsFinding] = createSignal(false);
@@ -73,7 +75,7 @@ export default function Main() {
             Go Back
           </Button>
           <Button variant="secondary" onClick={onFind} disabled={isFinding()}>
-            {isFinding() && state() < "done" ? (
+            {isFinding() ? (
               <span class="flex items-center gap-2">
                 <span
                   class="inline-block w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin"
@@ -98,8 +100,8 @@ export default function Main() {
         <Button
           variant="basic"
           class="fixed bottom-4 p-2 right-4 rounded-full"
-          onClick={restartServer}
-          title="Restart server"
+          onClick={reloadModel}
+          title="Reload model"
         >
           <RotateCcw />
         </Button>
@@ -112,7 +114,7 @@ export default function Main() {
             state() === "duh"
           }
           fallback={
-            <div class="center text-center bottom-4 text-white mt-4">
+            <div class="center text-center bottom-4 text-white mt-4 flex flex-col gap-2">
               <p class="text-lg font-semibold flex items-center gap-2">
                   {
                     isFinding() ? (
@@ -131,16 +133,24 @@ export default function Main() {
             </div>
           }
         >
-          <div class="center text-center bottom-4 text-white mt-4">
+          <div class="center text-center bottom-4 text-white mt-4 flex flex-col gap-2">
             <p class="text-lg font-semibold">
               {state() === "done"
                 ? "Waldo was Found!"
                 : state() === "failed"
                   ? "No Waldo was Found!"
                   : state() === "error"
-                    ? "Error, couldn't contact the server!"
+                    ? "Error, inference failed!"
                     : "Solve it yourself!"}
             </p>
+            <Show when={deviceUsed()}>
+              <p class="text-sm opacity-80 mt-1">
+                Device: {deviceUsed() === "webgpu" ? "GPU" : "CPU"}
+              </p>
+            </Show>
+            <Show when={lastResultPath()}>
+              <p class="text-xs opacity-70 mt-1">Saved: {lastResultPath()}</p>
+            </Show>
           </div>
         </Show>
 

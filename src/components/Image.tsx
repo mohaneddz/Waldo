@@ -1,19 +1,20 @@
-import { createSignal, onMount, Show, For } from "solid-js";
+import { createEffect, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 
 type BBox = [number, number, number, number];
+
 interface Coord {
   class: string;
   confidence: number;
-  bbox: BBox; // [x1, y1, x2, y2] in original image pixel space
+  bbox: BBox;
 }
 
 interface Props {
-  src: string; // image url or data uri
-  boxes?: Coord[]; // detected boxes
-  highlight?: boolean; // when true, blur+dim everything except boxes
-  zoom?: number; // magnifier zoom level
-  lensSize?: number; // magnifier lens size in px
-  class?: string; // container classes
+  src: string;
+  boxes?: Coord[];
+  highlight?: boolean;
+  zoom?: number;
+  lensSize?: number;
+  class?: string;
 }
 
 export default function Image(props: Props) {
@@ -25,6 +26,8 @@ export default function Image(props: Props) {
   const [dispH, setDispH] = createSignal(0);
   const [natW, setNatW] = createSignal(0);
   const [natH, setNatH] = createSignal(0);
+  const [imageLeft, setImageLeft] = createSignal(0);
+  const [imageTop, setImageTop] = createSignal(0);
 
   const [hovering, setHovering] = createSignal(false);
   const [mouseX, setMouseX] = createSignal(0);
@@ -47,46 +50,92 @@ export default function Image(props: Props) {
     "#bf5af2",
   ];
 
-  const onImgLoad = (e: Event) => {
-    const img = e.currentTarget as HTMLImageElement;
+  const clamp = (value: number, min: number, max: number) =>
+    Math.min(max, Math.max(min, value));
+
+  const measureImage = () => {
+    if (!containerRef || !imgRef) {
+      return;
+    }
+
+    const containerRect = containerRef.getBoundingClientRect();
+    const naturalWidth = natW();
+    const naturalHeight = natH();
+
+    if (naturalWidth > 0 && naturalHeight > 0) {
+      // The <img> element is full-size while object-contain fits content inside it.
+      // Compute the actual rendered content box to align overlays correctly.
+      const scale = Math.min(
+        containerRect.width / naturalWidth,
+        containerRect.height / naturalHeight,
+      );
+      const renderedWidth = naturalWidth * scale;
+      const renderedHeight = naturalHeight * scale;
+
+      setDispW(renderedWidth);
+      setDispH(renderedHeight);
+      setImageLeft(Math.max(0, (containerRect.width - renderedWidth) / 2));
+      setImageTop(Math.max(0, (containerRect.height - renderedHeight) / 2));
+      return;
+    }
+
+    const imgRect = imgRef.getBoundingClientRect();
+    setDispW(imgRect.width);
+    setDispH(imgRect.height);
+    setImageLeft(Math.max(0, imgRect.left - containerRect.left));
+    setImageTop(Math.max(0, imgRect.top - containerRect.top));
+  };
+
+  const onImgLoad = (event: Event) => {
+    const img = event.currentTarget as HTMLImageElement;
     setLoaded(true);
     setNatW(img.naturalWidth);
     setNatH(img.naturalHeight);
-    queueMicrotask(() => {
-      if (imgRef) {
-        setDispW(imgRef.clientWidth);
-        setDispH(imgRef.clientHeight);
-      }
-    });
+    requestAnimationFrame(measureImage);
   };
 
-  const updateMouse = (ev: MouseEvent) => {
-    if (!containerRef) return;
+  const updateMouse = (event: MouseEvent) => {
+    if (!containerRef || !loaded() || dispW() <= 0 || dispH() <= 0) {
+      setHovering(false);
+      return;
+    }
+
     const rect = containerRef.getBoundingClientRect();
-    const x = Math.max(0, Math.min(ev.clientX - rect.left, rect.width));
-    const y = Math.max(0, Math.min(ev.clientY - rect.top, rect.height));
-    setMouseX(x);
-    setMouseY(y);
+    const x = event.clientX - rect.left - imageLeft();
+    const y = event.clientY - rect.top - imageTop();
+    const insideImage =
+      x >= 0 &&
+      y >= 0 &&
+      x <= dispW() &&
+      y <= dispH();
+
+    if (!insideImage) {
+      setHovering(false);
+      return;
+    }
+
+    setHovering(true);
+    setMouseX(clamp(x, 0, dispW()));
+    setMouseY(clamp(y, 0, dispH()));
   };
 
   const lensStyle = () => {
-    const w = lensSize();
-    const h = lensSize();
-    const x = Math.max(w / 2, Math.min(mouseX(), dispW() - w / 2));
-    const y = Math.max(h / 2, Math.min(mouseY(), dispH() - h / 2));
-
-    const bgW = dispW() * zoom();
-    const bgH = dispH() * zoom();
-    const bgX = -(mouseX() * zoom() - w / 2);
-    const bgY = -(mouseY() * zoom() - h / 2);
+    const width = lensSize();
+    const height = lensSize();
+    const left = imageLeft() + clamp(mouseX() - width / 2, 0, Math.max(0, dispW() - width));
+    const top = imageTop() + clamp(mouseY() - height / 2, 0, Math.max(0, dispH() - height));
+    const bgWidth = dispW() * zoom();
+    const bgHeight = dispH() * zoom();
+    const bgX = -(mouseX() * zoom() - width / 2);
+    const bgY = -(mouseY() * zoom() - height / 2);
 
     return {
-      left: `${x - w / 2}px`,
-      top: `${y - h / 2}px`,
-      width: `${w}px`,
-      height: `${h}px`,
+      left: `${left}px`,
+      top: `${top}px`,
+      width: `${width}px`,
+      height: `${height}px`,
       "background-image": `url(${props.src})`,
-      "background-size": `${bgW}px ${bgH}px`,
+      "background-size": `${bgWidth}px ${bgHeight}px`,
       "background-position": `${bgX}px ${bgY}px`,
     } as const;
   };
@@ -96,96 +145,100 @@ export default function Image(props: Props) {
     const y1 = bbox[1] * scaleY();
     const x2 = bbox[2] * scaleX();
     const y2 = bbox[3] * scaleY();
-    const w = Math.max(0, x2 - x1);
-    const h = Math.max(0, y2 - y1);
+    const width = Math.max(0, x2 - x1);
+    const height = Math.max(0, y2 - y1);
 
-    // background-position is negative offset to align source
     return {
-      left: `${x1}px`,
-      top: `${y1}px`,
-      width: `${w}px`,
-      height: `${h}px`,
+      left: `${imageLeft() + x1}px`,
+      top: `${imageTop() + y1}px`,
+      width: `${width}px`,
+      height: `${height}px`,
       "background-image": `url(${props.src})`,
       "background-size": `${dispW()}px ${dispH()}px`,
       "background-position": `${-x1}px ${-y1}px`,
     } as const;
   };
 
-  // Keep displayed size in sync on window resize
+  createEffect(() => {
+    props.src;
+    setLoaded(false);
+    setHovering(false);
+    setDispW(0);
+    setDispH(0);
+    setNatW(0);
+    setNatH(0);
+    setImageLeft(0);
+    setImageTop(0);
+  });
+
   onMount(() => {
-    const onResize = () => {
-      if (imgRef) {
-        setDispW(imgRef.clientWidth);
-        setDispH(imgRef.clientHeight);
-      }
-    };
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
+    const observer = new ResizeObserver(() => {
+      measureImage();
+    });
+
+    if (containerRef) {
+      observer.observe(containerRef);
+    }
+
+    if (imgRef) {
+      observer.observe(imgRef);
+    }
+
+    window.addEventListener("resize", measureImage);
+
+    onCleanup(() => {
+      observer.disconnect();
+      window.removeEventListener("resize", measureImage);
+    });
   });
 
   return (
     <div
       ref={containerRef}
-      class={`relative inline-block ${props.class ?? ""}`}
-      onMouseEnter={() => setHovering(true)}
+      class={`relative ${props.class ?? ""}`}
       onMouseLeave={() => setHovering(false)}
       onMouseMove={updateMouse}
-      style={{
-        // Let image define size; container matches img dimensions
-        width: dispW() ? `${dispW()}px` : undefined,
-        height: dispH() ? `${dispH()}px` : undefined,
-      }}
     >
-      {/* Base image (optionally blurred/dimmed) */}
       <img
         ref={imgRef}
         src={props.src}
         onLoad={onImgLoad}
-        class={`block max-w-full max-h-full rounded ${
-          props.highlight ? "" : ""
-        }`}
-        style={
-          props.highlight
-            ? { filter: "blur(3px) brightness(0.6)" }
-            : {}
-        }
+        class="block h-full w-full rounded object-contain select-none"
+        style={props.highlight ? { filter: "blur(3px) brightness(0.6)" } : {}}
         alt=""
+        draggable={false}
       />
 
-      {/* Unblurred focus rectangles when highlight is on */}
-      <Show
-        when={
-          loaded() &&
-          props.highlight &&
-          props.boxes &&
-          props.boxes.length > 0
-        }
-      >
-        <For each={props.boxes!}>
-          {(b, i) => (
-            <div
-              class="absolute overflow-hidden"
-              style={boxStyle(b.bbox)}
-            >
-              {/* Unblurred crop via background image above */}
-              <div
-                class="absolute inset-0 rounded"
-                style={{
-                  border: `2px solid ${palette[i() % palette.length]}`,
-                }}
-              />
-            </div>
-          )}
-        </For>
-      </Show>
+      <div class="pointer-events-none absolute inset-0">
+        <Show
+          when={
+            loaded() &&
+            props.highlight &&
+            props.boxes &&
+            props.boxes.length > 0
+          }
+        >
+          <For each={props.boxes!}>
+            {(box, index) => (
+              <div class="absolute overflow-hidden rounded" style={boxStyle(box.bbox)}>
+                <div
+                  class="absolute inset-0 rounded"
+                  style={{
+                    border: `2px solid ${palette[index() % palette.length]}`,
+                  }}
+                />
+              </div>
+            )}
+          </For>
+        </Show>
 
-      {/* Hover magnifier lens */}
-      <Show when={loaded() && hovering()}>
-        <div
-          class="absolute pointer-events-none rounded-md border border-white/70 shadow-lg"
-          style={lensStyle()}
-        />
-      </Show>
+        <Show when={loaded() && hovering()}>
+          <div
+            class="absolute rounded-md border border-white/70 shadow-lg"
+            style={lensStyle()}
+          />
+        </Show>
+      </div>
     </div>
   );
 }
