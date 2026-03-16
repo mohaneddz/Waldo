@@ -1,6 +1,6 @@
 
 <h1 style="font-family: Arial, sans-serif; font-size: 36px; color: #4A90E2; display: flex; align-items: center; border-bottom: 3px solid #4A90E2; padding-bottom: 5px;">
-    <img src="screenshots/icon.png" alt="Waldo Icon" style="width: 50px; height: 50px; margin-right: 15px;">
+    <img src="screenshots/Icon.png" alt="Wardi Icon" style="width: 50px; height: 50px; margin-right: 15px;">
     Waldo Finder! 🌟
 </h1>
 Waldo Solver is a fast, privacy-first, AI-powered desktop app that helps you find Waldo in images using advanced computer vision models. Built for speed, simplicity, and local intelligence.
@@ -143,9 +143,6 @@ BY SPENDING DAYS OF MY LIFE SOLVING A KIDS BOOK SERIES
 │   ├── routes/            # Application pages.
 │   ├── utils/             # Utility functions.
 │   └── main.tsx           # Application entry point.
-├── backend/               # Python backend (AI models).
-│   ├── detect.py          # Waldo detection logic.
-│   └── ...                # Other backend files.
 └── src-tauri/             # Tauri integration (Rust backend).
 ```
 
@@ -165,21 +162,6 @@ BY SPENDING DAYS OF MY LIFE SOLVING A KIDS BOOK SERIES
 
 3. **Use the installer:**
     - From the releases section on windows, for other installers you can build on your machine.
-
-4. **Start the Backend:**  
-   ```sh
-   python backend/detect.py
-   ```
-
-5. **Start the Frontend (Dev):**  
-   ```sh
-   npm run dev
-   ```
-
-6. **Build Desktop App:**  
-   ```sh
-   npm run tauri build
-   ```
 
 ---
 
