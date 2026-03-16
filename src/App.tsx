@@ -1,24 +1,10 @@
 import { Router, Route } from "@solidjs/router";
-import { getStoreValue } from "./utils/store";
-import { onMount } from "solid-js";
 
 import Titlebar from "@/layout/Titlebar";
 import { routes } from "@/routes/Routes";
-import { invoke } from "@tauri-apps/api/core";
 
 function App() {
-  // Backend launch without blocking render
-  onMount(() => {
-    getStoreValue("autostart").then((autostart) => {
-      if (autostart) {
-        invoke('launch_backend')
-          .then(() => console.log("Backend launched successfully"))
-          .catch((error) => console.error("Failed to launch backend:", error));
-      } else {
-        console.log("Autostart is disabled, backend will not be launched.");
-      }
-    });
-  });
+
 
   return (
     <Router

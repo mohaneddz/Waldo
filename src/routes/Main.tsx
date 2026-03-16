@@ -2,7 +2,9 @@ import Button from "@/components/Buttton";
 import useMain from "@/hooks/useMain";
 import { Show, createEffect, createSignal } from "solid-js";
 import Image from "@/components/Image";
-import { RotateCcw, FilePlus } from "lucide-solid";
+
+import RotateCcw from "lucide-solid/icons/rotate-ccw";
+import FilePlus from "lucide-solid/icons/file-plus";
 
 export default function Main() {
   const {

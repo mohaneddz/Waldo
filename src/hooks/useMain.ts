@@ -22,17 +22,6 @@ export default function useMain() {
 
   const INFER_URL = 'http://localhost:8000/infer';
 
-  async function ensureServer() {
-    try {
-      const running = await invoke<boolean>('is_server_running');
-      if (!running) {
-        await invoke('launch_backend');
-      }
-    } catch {
-      // best effort; proceed to request
-    }
-  }
-
   async function inferOnce(ms: number) {
     const controller = new AbortController();
     const timerId = globalThis.setTimeout(() => {
@@ -56,7 +45,7 @@ export default function useMain() {
   async function restartServer() {
     try {
       await invoke('restart_server');
-      console.log('Server restarted successfully');
+      // console.log('Server restarted successfully');
     } catch (error) {
       console.error('Failed to restart server:', error);
     }
@@ -67,10 +56,12 @@ export default function useMain() {
 
   function handleFindWaldo() {
     sendImg();
-    console.log('Finding Waldo...');
+    // console.log('Finding Waldo...');
   }
 
   onMount(async () => {
+    // Start the backend server as soon as the component loads.
+
     const stateObj = location.state;
     if (!stateObj || typeof stateObj !== 'object' || !('path' in stateObj)) {
       console.error('Invalid state object:', stateObj);
@@ -99,7 +90,7 @@ export default function useMain() {
       filters: [{ name: 'Images', extensions: ['png', 'jpeg', 'jpg'] }],
     });
     if (!file || Array.isArray(file)) return;
-    await loadImage(file);
+    await loadImage(file as string);
     setHighlight(false);
   }
 
@@ -109,8 +100,9 @@ export default function useMain() {
       setState('error');
       return;
     }
-
-    await ensureServer();
+    
+    // No longer need to call ensureServer() here.
+    // The server is started onMount, and the retry logic below will handle restarts if it crashes.
 
     let ms = (timeout() ?? 10) * 1000;
     let attempt = 0;
@@ -147,11 +139,7 @@ export default function useMain() {
           // On first timeout, try restarting the server and retry once with a longer timeout
           attempt += 1;
           if (attempt < maxAttempts) {
-            try {
-              await invoke('restart_server');
-            } catch {
-              // ignore; we'll retry anyway
-            }
+            await restartServer(); // Use the corrected restart function
             ms = Math.min(ms * 2, 600_000); // cap at 10 minutes
             continue;
           }
@@ -162,11 +150,7 @@ export default function useMain() {
         console.error(`Failed to send image (attempt ${attempt + 1}):`, err);
         attempt += 1;
         if (attempt < maxAttempts) {
-          try {
-            await invoke('restart_server');
-          } catch {
-            // ignore and retry
-          }
+          await restartServer(); // Use the corrected restart function
           continue;
         }
         setState('error');

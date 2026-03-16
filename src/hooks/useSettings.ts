@@ -28,7 +28,7 @@ export default function useSettings() {
         await setStoreValue('timeout', timeout());
         await setStoreValue('saveLocation', saveLocation());
 
-		console.log('Settings saved');
+		// console.log('Settings saved');
 	}
 
 	return { handleGoBack, saveSettings , autoStart, setAutoStart, timeout, setTimeout, saveLocation, setSaveLocation };

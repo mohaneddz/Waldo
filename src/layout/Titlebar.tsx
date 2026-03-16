@@ -31,7 +31,7 @@ export default function Titlebar() {
 
     await listen('tauri://maximize', () => setIsMaximized(true));
     await listen('tauri://unmaximize', () => setIsMaximized(false));
-    await listen('tauri://minimize', () => console.log('Window minimized'));
+    // await listen('tauri://minimize', () => console.log('Window minimized'));
 
     await listen('tauri://resize', async () => {
       const max = await appWindow.isMaximized();

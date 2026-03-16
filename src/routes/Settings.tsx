@@ -2,6 +2,7 @@ import Button from "@/components/Buttton";
 import useSettings from "@/hooks/useSettings";
 import NumberInput from "@/components/NumberInput";
 import TextInput from "@/components/TextInput";
+
 import { createSignal } from "solid-js";
 
 export default function About() {

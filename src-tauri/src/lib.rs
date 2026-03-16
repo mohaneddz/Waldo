@@ -1,145 +1,171 @@
-use base64::engine::general_purpose;
-use base64::engine::Engine;
+#![cfg_attr(
+    all(not(debug_assertions), target_os = "windows"),
+    windows_subsystem = "windows"
+)]
+
+use anyhow::Context;
+use base64::{engine::general_purpose, Engine};
 use lazy_static::lazy_static;
-use std::fs;
-use std::net::TcpStream;
-use std::path::PathBuf;
-use std::process::{Child, Command, Stdio};
-use std::sync::Mutex;
-use std::thread::sleep;
-use std::time::{Duration, Instant};
-use tauri::path::BaseDirectory;
+use std::{
+    fs::{self, File},
+    net::TcpStream,
+    path::PathBuf,
+    process::{Child, Command, Stdio},
+    sync::Mutex,
+    thread::sleep,
+    time::{Duration, Instant},
+};
 use tauri::Manager;
 
 lazy_static! {
-    static ref SERVER_PROCESS: Mutex<Option<std::process::Child>> = Mutex::new(None);
+    static ref SERVER_PROCESS: Mutex<Option<Child>> = Mutex::new(None);
 }
 
-fn backend_dir() -> Option<PathBuf> {
-    let check = |candidate: PathBuf| {
-        if candidate.join("app.py").exists() {
-            return Some(candidate);
-        }
-        None
-    };
+const BACKEND_ADDR: &str = "127.0.0.1:8000";
+const EXE_NAME: &str = "appx86_64-pc-windows-msvc.exe";
 
-    // Try exe-derived locations
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(mut dir) = exe.parent().map(|p| p.to_path_buf()) {
-            for _ in 0..3 {
-                if let Some(parent) = dir.parent() {
-                    dir = parent.to_path_buf();
-                }
-            }
-            let backend_candidate = dir.join("backend");
-            if let Some(found) = check(backend_candidate) {
-                return Some(found);
-            }
-            let src_models_candidate = dir.join("src-tauri").join("models");
-            if let Some(found) = check(src_models_candidate) {
-                return Some(found);
-            }
-        }
+/// Finds the directory containing the native backend executable.
+/// Only looks for the native exe; if not found, returns an error.
+fn backend_dir(app: &tauri::AppHandle) -> anyhow::Result<PathBuf> {
+    // Bundled resources: <resource_dir>/models/
+    let resource_dir = app
+        .path()
+        .resource_dir()
+        .context("Failed to get resource_dir from Tauri")?
+        .join("models");
+
+    if resource_dir.join(EXE_NAME).exists() {
+        println!(
+            "Using bundled resources directory for backend (native exe found): {:?}",
+            &resource_dir
+        );
+        return Ok(resource_dir);
     }
 
-    // Try current working directory
-    if let Ok(cwd) = std::env::current_dir() {
-        let backend_candidate = cwd.join("backend");
-        if let Some(found) = check(backend_candidate) {
-            return Some(found);
-        }
-        let src_models_candidate = cwd.join("src-tauri").join("models");
-        if let Some(found) = check(src_models_candidate) {
-            return Some(found);
-        }
+    // Development path: three levels up from current exe, then /models
+    let exe_path = std::env::current_exe().context("Failed to get current executable path")?;
+    let dev_path = exe_path
+        .parent()
+        .and_then(|p| p.parent())
+        .and_then(|p| p.parent())
+        .map(|p| p.join("models"))
+        .context("Failed to construct development path to 'models' directory")?;
+
+    if dev_path.join(EXE_NAME).exists() {
+        println!(
+            "Using development models directory (native exe found): {:?}",
+            &dev_path
+        );
+        return Ok(dev_path);
     }
 
-    None
+    anyhow::bail!(
+        "Native backend executable not found. Checked:\n  - Bundled Resources: {:?}\n  - Development Path: {:?}",
+        &resource_dir,
+        &dev_path
+    )
+}
+
+/// Returns the full path to the native backend executable, or an error if not found.
+fn get_backend_executable_path(app: &tauri::AppHandle) -> anyhow::Result<PathBuf> {
+    let dir = backend_dir(app)?;
+    let exe_path = dir.join(EXE_NAME);
+
+    if exe_path.exists() {
+        println!("Resolved native backend executable at: {:?}", &exe_path);
+        Ok(exe_path)
+    } else {
+        anyhow::bail!("Native backend executable not found at expected path: {:?}", exe_path);
+    }
 }
 
 fn wait_for_port(addr: &str, timeout: Duration) -> bool {
     let start = Instant::now();
     while start.elapsed() < timeout {
         if TcpStream::connect(addr).is_ok() {
+            println!("Backend is now available on {}", addr);
             return true;
         }
         sleep(Duration::from_millis(200));
     }
+    println!("Timeout reached waiting for backend on {}", addr);
     false
 }
 
 #[cfg(windows)]
 fn kill_process_tree(pid: u32) {
-    let _ = Command::new("taskkill")
+    println!("Attempting to kill process tree for PID: {}", pid);
+    // Best-effort; ignore errors but log them
+    if let Err(e) = Command::new("taskkill")
         .args(["/PID", &pid.to_string(), "/T", "/F"])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
-        .spawn()
-        .and_then(|mut c| c.wait());
+        .status()
+    {
+        eprintln!("taskkill failed: {:?}", e);
+    }
 }
 
 #[cfg(not(windows))]
-fn kill_process_tree(_pid: u32) {}
-
-const BACKEND_ADDR: &str = "127.0.0.1:8000";
-
-/// Check if conda is available, without showing any terminal window (Windows-safe)
-#[cfg(windows)]
-fn conda_available() -> bool {
-    use std::os::windows::process::CommandExt;
-    Command::new("conda")
-        .arg("--version")
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .creation_flags(0x08000000) // CREATE_NO_WINDOW
-        .spawn()
-        .map(|mut child| child.wait().map(|s| s.success()).unwrap_or(false))
-        .unwrap_or(false)
+fn kill_process_tree(pid: u32) {
+    println!("Attempting to kill process with PID: {}", pid);
+    if let Err(e) = Command::new("kill")
+        .args(["-9", &pid.to_string()])
+        .status()
+    {
+        eprintln!("kill failed: {:?}", e);
+    }
 }
 
-#[cfg(not(windows))]
-fn conda_available() -> bool {
-    Command::new("conda")
-        .arg("--version")
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-        .map(|mut child| child.wait().map(|s| s.success()).unwrap_or(false))
-        .unwrap_or(false)
-}
+/// Spawns the native backend executable found in /models (no python fallback).
+fn spawn_backend(app: &tauri::AppHandle) -> anyhow::Result<Child> {
+    let dir = backend_dir(app)?;
+    println!("Backend directory resolved to: {:?}", &dir);
 
-fn spawn_backend(_app: &tauri::AppHandle) -> std::io::Result<Child> {
-    let Some(dir) = backend_dir() else {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::NotFound,
-            "backend directory not found",
-        ));
-    };
+    let exe_path = dir.join(EXE_NAME);
+    if !exe_path.exists() {
+        anyhow::bail!(
+            "Expected native backend executable at {:?} but it was not found.",
+            exe_path
+        );
+    }
 
-    let use_conda = conda_available();
+    // Configure logging for debug builds (writes stdout/stderr to app_log_dir)
+    let (stdout_log, stderr_log) = if cfg!(debug_assertions) {
+        let log_dir = app.path().app_log_dir().context("Failed to get application log directory")?;
+        if !log_dir.exists() {
+            fs::create_dir_all(&log_dir)?;
+        }
+        let stdout_path = log_dir.join("backend-stdout.log");
+        let stderr_path = log_dir.join("backend-stderr.log");
 
-    let mut cmd = if use_conda {
-        let mut c = Command::new("conda");
-        c.args(["run", "-n", "waldo", "python", "app.py"]);
-        c
+        println!("Backend logs will be written to:");
+        println!("  stdout: {:?}", &stdout_path);
+        println!("  stderr: {:?}", &stderr_path);
+
+        let stdout_file = File::create(stdout_path).context("Failed to create stdout log file")?;
+        let stderr_file = File::create(stderr_path).context("Failed to create stderr log file")?;
+
+        (Stdio::from(stdout_file), Stdio::from(stderr_file))
     } else {
-        let mut c = Command::new("python");
-        c.args(["app.py"]);
-        c
+        (Stdio::null(), Stdio::null())
     };
 
+    // Launch the native executable directly
+    let mut cmd = Command::new(&exe_path);
     cmd.current_dir(&dir)
         .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null());
+        .stdout(stdout_log)
+        .stderr(stderr_log);
 
-    #[cfg(windows)]
+    #[cfg(all(windows, not(debug_assertions)))]
     {
         use std::os::windows::process::CommandExt;
         cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
     }
 
-    cmd.spawn()
+    println!("Spawning backend native executable with command: {:?}", cmd);
+    cmd.spawn().context("failed to spawn native backend executable")
 }
 
 #[tauri::command]
@@ -150,62 +176,38 @@ fn read_img(path: String) -> Result<String, String> {
 }
 
 #[tauri::command]
-fn launch_backend(app: tauri::AppHandle) -> bool {
-    let mut server_process = SERVER_PROCESS.lock().unwrap();
-    if server_process.is_some() {
-        return true;
-    }
-    match spawn_backend(&app) {
-        Ok(mut child) => {
-            let pid = child.id();
-            if wait_for_port(BACKEND_ADDR, Duration::from_secs(20)) {
-                *server_process = Some(child);
-                true
-            } else {
-                let _ = child.kill();
-                #[cfg(windows)]
-                {
-                    kill_process_tree(pid);
-                }
-                let _ = child.wait();
-                false
-            }
-        }
-        Err(_) => false,
-    }
-}
-
-#[tauri::command]
 fn restart_server(app: tauri::AppHandle) -> bool {
+    println!("Restarting server...");
     let mut server_process = SERVER_PROCESS.lock().unwrap();
 
     if let Some(mut process) = server_process.take() {
+        println!("Found existing server process. Terminating it now.");
         let pid = process.id();
-        let _ = process.kill();
-        #[cfg(windows)]
-        {
-            kill_process_tree(pid);
-        }
+        kill_process_tree(pid);
         let _ = process.wait();
+        println!("Old process terminated.");
     }
 
     match spawn_backend(&app) {
-        Ok(mut child) => {
-            let pid = child.id();
-            if wait_for_port(BACKEND_ADDR, Duration::from_secs(20)) {
+        Ok(child) => {
+            println!("Backend process spawned with PID: {}", child.id());
+            if wait_for_port(BACKEND_ADDR, Duration::from_secs(60)) {
+                println!("Backend started successfully.");
                 *server_process = Some(child);
                 true
             } else {
-                let _ = child.kill();
-                #[cfg(windows)]
-                {
-                    kill_process_tree(pid);
-                }
-                let _ = child.wait();
+                println!("Backend failed to start within the timeout.");
+                let mut failed_child = child;
+                let pid = failed_child.id();
+                kill_process_tree(pid);
+                let _ = failed_child.wait();
                 false
             }
         }
-        Err(_) => false,
+        Err(e) => {
+            eprintln!("Failed to spawn backend: {:?}", e);
+            false
+        }
     }
 }
 
@@ -217,11 +219,26 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
+        // Ensure backend is terminated if a window is closed or app exits
+        .on_window_event(|_window, event| {
+            if let tauri::WindowEvent::CloseRequested { .. } = event {
+                let mut server_process = SERVER_PROCESS.lock().unwrap();
+                if let Some(mut process) = server_process.take() {
+                    let pid = process.id();
+                    kill_process_tree(pid);
+                    let _ = process.wait();
+                    println!("Backend process terminated on window close (PID: {}).", pid);
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             read_img,
-            launch_backend,
             restart_server,
         ])
+        .setup(|app| {
+            restart_server(app.handle().clone());
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
