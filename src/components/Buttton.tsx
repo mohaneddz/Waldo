@@ -31,7 +31,7 @@ export default function Button(props: Props) {
 
   return (
     <div
-      class={`click min-h-max min-w-max font-bold text-center ` + getClass() + (props.disabled ? ' opacity-50 cursor-not-allowed ' : '') + props.class}
+      class={`click inline-flex items-center justify-center font-bold text-center leading-none ` + getClass() + (props.disabled ? ' opacity-50 cursor-not-allowed ' : '') + props.class}
       onClick={!props.disabled ? onClick : undefined}
       title={props.title}
     >

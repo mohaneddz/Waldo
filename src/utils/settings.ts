@@ -166,6 +166,11 @@ export async function loadAppSettings(): Promise<AppSettings> {
   };
 }
 
+export async function hasConfiguredSaveLocation(): Promise<boolean> {
+  const saveLocation = await getStoreValue<string>(SETTINGS_KEYS.saveLocation);
+  return typeof saveLocation === "string" && saveLocation.trim().length > 0;
+}
+
 export async function saveAppSettings(
   settings: AppSettings,
 ): Promise<AppSettings> {

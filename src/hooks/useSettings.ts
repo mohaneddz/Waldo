@@ -6,7 +6,6 @@ import {
   DEFAULT_TIMEOUT_SECONDS,
   MAX_TIMEOUT_SECONDS,
   MIN_TIMEOUT_SECONDS,
-  getDefaultSaveLocation,
   loadAppSettings,
   saveAppSettings,
   validateSaveLocation,
@@ -50,28 +49,24 @@ export default function useSettings() {
 
   async function pickSaveLocation() {
     clearMessages();
+    try {
+      const selected = await open({
+        directory: true,
+        multiple: false,
+      });
 
-    const directory = await open({
-      directory: true,
-      multiple: false,
-    });
-
-    if (!directory || Array.isArray(directory)) {
-      return;
+      if (selected !== null && !Array.isArray(selected)) {
+        const validatedLocation = await validateSaveLocation(selected);
+        if (validatedLocation.error) {
+          setErrorMessage(validatedLocation.error);
+        } else {
+          setSaveLocation(validatedLocation.value);
+        }
+      }
+    } catch (error) {
+      console.error("Failed to open dialog:", error);
+      setErrorMessage("Failed to browse for save location.");
     }
-
-    const validatedLocation = await validateSaveLocation(directory);
-    if (validatedLocation.error) {
-      setErrorMessage(validatedLocation.error);
-      return;
-    }
-
-    setSaveLocation(validatedLocation.value);
-  }
-
-  async function resetSaveLocation() {
-    clearMessages();
-    setSaveLocation(await getDefaultSaveLocation());
   }
 
   async function saveSettings() {
@@ -126,7 +121,6 @@ export default function useSettings() {
     inferenceDevice,
     loading,
     pickSaveLocation,
-    resetSaveLocation,
     saveLocation,
     saveSettings,
     setAutoStart,

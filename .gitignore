@@ -2,3 +2,4 @@ node_modules
 dist
 models/*
 src-tauri/models/best.pt
+docs/**

@@ -3,6 +3,7 @@ import useSettings from "@/hooks/useSettings";
 import NumberInput from "@/components/NumberInput";
 import TextInput from "@/components/TextInput";
 
+import { Folder } from "lucide-solid";
 import { Show, createSignal } from "solid-js";
 
 export default function Settings() {
@@ -18,7 +19,6 @@ export default function Settings() {
     inferenceDevice,
     setInferenceDevice,
     pickSaveLocation,
-    resetSaveLocation,
     loading,
     errorMessage,
     successMessage,
@@ -45,9 +45,8 @@ export default function Settings() {
 
   return (
     <section
-      class={`center min-h-screen ${
-        goingBack() ? "animate-fadeOutScale" : "animate-fadeInScale"
-      }`}
+      class={`center min-h-screen ${goingBack() ? "animate-fadeOutScale" : "animate-fadeInScale"
+        }`}
     >
       <div class="bg-primary-dark min-w-[40vw] min-h-[40vw] border rounded-lg center flex-col p-8">
         <h1 class="text-7xl font-bold text-center my-12">Settings</h1>
@@ -96,38 +95,27 @@ export default function Settings() {
           </div>
 
           {/* Save Location */}
-          <div class="flex justify-between items-start w-full gap-4">
+          {/* <div class="flex justify-between items-start w-full gap-4">
             <label for="saveLocation">Save location</label>
-            <div class="flex-1 space-y-3">
+            <div class="flex flex-1 space-y-3 h-min gap-4">
               <TextInput
                 class="w-full"
                 text={saveLocation()}
                 setText={setSaveLocation}
                 id="saveLocation"
-                placeholder="Choose or enter a save location"
-                readonly={loading() || saving()}
+                placeholder="Choose a save location"
+                readonly={true}
               />
-              <div class="flex gap-3">
-                <Button
+                  <Button
                   variant="ghost"
+                  class="h-[42px] w-[50px] px-0 py-0 shrink-0"
                   onClick={pickSaveLocation}
-                  disabled={loading() || saving()}
-                >
-                  Browse
-                </Button>
-                <Button
-                  variant="ghost"
-                  onClick={resetSaveLocation}
-                  disabled={loading() || saving()}
-                >
-                  Use Default
-                </Button>
-              </div>
-              <p class="text-xs text-white/70">
-                Save folders must stay inside Downloads, Documents, Desktop, Pictures, Public, Home, Temp, App Data, or App Local Data.
-              </p>
+                  // disabled={loading() || saving()}
+                  >
+                  <Folder class="h-5 w-5" />
+                  </Button>
             </div>
-          </div>
+          </div> */}
         </div>
 
         <div class="mt-6 min-h-6 text-center">

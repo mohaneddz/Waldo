@@ -1,5 +1,5 @@
 import { useLocation } from "@solidjs/router";
-import { onCleanup, onMount, createSignal } from "solid-js";
+import { onCleanup, onMount, createEffect, createSignal } from "solid-js";
 import { open } from "@tauri-apps/plugin-dialog";
 
 import { createObjectUrlFromPath } from "@/utils/image";
@@ -7,11 +7,12 @@ import {
   loadModel,
   resetModel,
   runInference,
+  saveInferenceResult,
   type DevicePreference,
   type Detection,
   type RuntimeDevice,
 } from "@/services/inference";
-import { loadAppSettings } from "@/utils/settings";
+import { hasConfiguredSaveLocation, loadAppSettings } from "@/utils/settings";
 
 export default function useMain() {
   const location = useLocation();
@@ -25,6 +26,15 @@ export default function useMain() {
     createSignal<DevicePreference>("auto");
   const [deviceUsed, setDeviceUsed] = createSignal<RuntimeDevice | null>(null);
   const [lastResultPath, setLastResultPath] = createSignal("");
+  const [hasSaveLocation, setHasSaveLocation] = createSignal(false);
+
+  async function syncSettings() {
+    const settings = await loadAppSettings();
+    setHasSaveLocation(await hasConfiguredSaveLocation());
+    setTimeout(settings.timeout);
+    setInferenceDevice(settings.inferenceDevice);
+    return settings;
+  }
 
   function handleGoBack() {
     window.history.back();
@@ -32,6 +42,21 @@ export default function useMain() {
 
   async function handleFindWaldo() {
     await sendImg();
+  }
+
+  async function handleDownloadResult() {
+    if (!imgPath()) {
+      throw new Error("No image selected.");
+    }
+
+    const settings = await syncSettings();
+    const savedPath = await saveInferenceResult(
+      imgPath(),
+      boxes(),
+      settings.saveLocation,
+    );
+    setLastResultPath(savedPath);
+    return savedPath;
   }
 
   onMount(async () => {
@@ -42,11 +67,15 @@ export default function useMain() {
     }
 
     const path = (stateObj as { path: string }).path;
-    const settings = await loadAppSettings();
-    setTimeout(settings.timeout);
-    setInferenceDevice(settings.inferenceDevice);
+    await syncSettings();
 
     await loadImage(path);
+  });
+
+  createEffect(() => {
+    if (location.pathname === "/main") {
+      void syncSettings();
+    }
   });
 
   onCleanup(() => {
@@ -81,9 +110,7 @@ export default function useMain() {
   }
 
   async function reloadModel() {
-    const settings = await loadAppSettings();
-    setTimeout(settings.timeout);
-    setInferenceDevice(settings.inferenceDevice);
+    const settings = await syncSettings();
     await resetModel();
     const runtimeDevice = await loadModel(settings.inferenceDevice);
     setDeviceUsed(runtimeDevice);
@@ -100,9 +127,7 @@ export default function useMain() {
     setBoxes([]);
     setLastResultPath("");
 
-    const settings = await loadAppSettings();
-    setTimeout(settings.timeout);
-    setInferenceDevice(settings.inferenceDevice);
+    const settings = await syncSettings();
 
     const timerId = globalThis.setTimeout(() => {
       setState("long");
@@ -138,6 +163,7 @@ export default function useMain() {
     setImg,
     handleGoBack,
     handleFindWaldo,
+    handleDownloadResult,
     state,
     pickNewPicture,
     highlight,
@@ -145,5 +171,6 @@ export default function useMain() {
     reloadModel,
     deviceUsed,
     lastResultPath,
+    hasSaveLocation,
   };
 }

@@ -5,6 +5,8 @@
 </h1>
 Waldo Solver is a fast, privacy-first, AI-powered desktop app that helps you find Waldo in images using advanced computer vision models. Built for speed, simplicity, and local intelligence.
 
+> Runtime update: the app now uses a TypeScript inference pipeline instead of the old Python server, so users no longer need to bundle Python or manage extra runtime dependencies.
+
 ---
 
 ## Tech Used 🧑‍💻
@@ -13,8 +15,8 @@ Waldo Solver is a fast, privacy-first, AI-powered desktop app that helps you fin
 ![SolidJS](https://img.shields.io/badge/SolidJS-2D8CFF?style=for-the-badge&logo=solid&logoColor=white)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind%20CSS-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white)
 ![Rust](https://img.shields.io/badge/Rust-000000?style=for-the-badge&logo=rust&logoColor=white)
-![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)
-![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white)  
+![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
+![ONNX Runtime](https://img.shields.io/badge/ONNX_Runtime-005CED?style=for-the-badge&logo=onnx&logoColor=white)
 ![YOLO](https://img.shields.io/badge/YOLO-FF9900?style=for-the-badge&logo=yolo&logoColor=white)
 
 ---
@@ -151,16 +153,24 @@ BY SPENDING DAYS OF MY LIFE SOLVING A KIDS BOOK SERIES
 ## Setup and Development 🛠️
 
 1. **Prerequisites:**  
-   - Node.js (v18+), Python (v3.9+), Rust, Tauri CLI, pip.
+   - Node.js (v18+), pnpm, Rust, and Tauri CLI.
 
 2. **Install Dependencies:**  
    ```sh
    pnpm install
-   conda create --name waldo python=="3.10"
-   pip install -r requirements.txt
    ```
 
-3. **Use the installer:**
+3. **Run in development:**
+    ```sh
+    pnpm start
+    ```
+
+4. **Build production assets:**
+    ```sh
+    pnpm build
+    ```
+
+5. **Use the installer:**
     - From the releases section on windows, for other installers you can build on your machine.
 
 ---

@@ -54,6 +54,7 @@ export const AUTO_SAVE = false;
 
 let sessionState: SessionState | null = null;
 let sessionPromise: Promise<SessionState> | null = null;
+let modelBytesPromise: Promise<Uint8Array> | null = null;
 
 const supportsCrossOriginIsolated =
   typeof self !== "undefined" && self.crossOriginIsolated;
@@ -76,12 +77,56 @@ async function createSession(
   executionProviders: ort.InferenceSession.SessionOptions["executionProviders"],
   deviceUsed: RuntimeDevice,
 ): Promise<SessionState> {
-  const session = await ort.InferenceSession.create(MODEL_URL, {
-    executionProviders,
-    graphOptimizationLevel: "all",
-  });
+  const modelBytes = await loadModelBytes();
+  let session: ort.InferenceSession;
+  try {
+    session = await ort.InferenceSession.create(modelBytes, {
+      executionProviders,
+      graphOptimizationLevel: "all",
+    });
+  } catch (error) {
+    const message = String(error);
+    if (message.toLowerCase().includes("protobuf parsing failed")) {
+      throw new Error(
+        "Model parsing failed. public/best.onnx is invalid or incompatible. Re-export ONNX and replace public/best.onnx.",
+      );
+    }
+    throw error;
+  }
 
   return { session, deviceUsed };
+}
+
+async function loadModelBytes(): Promise<Uint8Array> {
+  if (!modelBytesPromise) {
+    modelBytesPromise = (async () => {
+      const response = await fetch(MODEL_URL, { cache: "no-store" });
+      if (!response.ok) {
+        throw new Error(
+          `Failed to fetch model at "${MODEL_URL}" (HTTP ${response.status}).`,
+        );
+      }
+
+      const contentType = response.headers.get("content-type") ?? "";
+      if (contentType.includes("text/html")) {
+        throw new Error(
+          `Model fetch returned HTML instead of ONNX bytes. Verify "${MODEL_URL}" exists in public assets.`,
+        );
+      }
+
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      if (bytes.length === 0) {
+        throw new Error(`Model file at "${MODEL_URL}" is empty.`);
+      }
+
+      return bytes;
+    })().catch((error) => {
+      modelBytesPromise = null;
+      throw error;
+    });
+  }
+
+  return modelBytesPromise;
 }
 
 async function buildSessionState(
@@ -505,11 +550,7 @@ export async function runInference(
   try {
     const detections = await detect(image, state.session);
     const annotatedImagePath = AUTO_SAVE
-      ? await saveAnnotatedResult(
-          image,
-          detections,
-          options.saveLocation,
-        )
+      ? await saveAnnotatedResult(image, detections, options.saveLocation)
       : "";
 
     return {
@@ -522,7 +563,21 @@ export async function runInference(
   }
 }
 
+export async function saveInferenceResult(
+  imagePath: string,
+  detections: Detection[],
+  saveLocation?: string | null,
+): Promise<string> {
+  const { image, objectUrl } = await loadImageFromPath(imagePath);
+  try {
+    return await saveAnnotatedResult(image, detections, saveLocation);
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
 export async function resetModel(): Promise<void> {
   sessionState = null;
   sessionPromise = null;
+  modelBytesPromise = null;
 }
