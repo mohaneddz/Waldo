@@ -19,6 +19,7 @@ export interface AppSettings {
   timeout: number;
   saveLocation: string;
   inferenceDevice: DevicePreference;
+  confidenceThreshold: number;
 }
 
 export interface SupportedSaveLocation {
@@ -31,9 +32,13 @@ export interface SupportedSaveLocation {
 export const DEFAULT_TIMEOUT_SECONDS = 30;
 export const MIN_TIMEOUT_SECONDS = 1;
 export const MAX_TIMEOUT_SECONDS = 600;
+export const DEFAULT_CONFIDENCE_THRESHOLD = 0.25;
+export const MIN_CONFIDENCE_THRESHOLD = 0.05;
+export const MAX_CONFIDENCE_THRESHOLD = 0.95;
 
 const SETTINGS_KEYS = {
   autoStart: "autostart",
+  confidenceThreshold: "confidenceThreshold",
   inferenceDevice: "inferenceDevice",
   saveLocation: "saveLocation",
   timeout: "timeout",
@@ -71,6 +76,17 @@ function sanitizeTimeout(value: unknown): number {
   return Math.min(
     MAX_TIMEOUT_SECONDS,
     Math.max(MIN_TIMEOUT_SECONDS, Math.round(value)),
+  );
+}
+
+function sanitizeConfidenceThreshold(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return DEFAULT_CONFIDENCE_THRESHOLD;
+  }
+
+  return Math.min(
+    MAX_CONFIDENCE_THRESHOLD,
+    Math.max(MIN_CONFIDENCE_THRESHOLD, Number(value.toFixed(2))),
   );
 }
 
@@ -152,6 +168,9 @@ export async function loadAppSettings(): Promise<AppSettings> {
   const autoStart = await getStoreValue<boolean>(SETTINGS_KEYS.autoStart);
   const timeout = await getStoreValue<number>(SETTINGS_KEYS.timeout);
   const saveLocation = await getStoreValue<string>(SETTINGS_KEYS.saveLocation);
+  const confidenceThreshold = await getStoreValue<number>(
+    SETTINGS_KEYS.confidenceThreshold,
+  );
   const inferenceDevice = await getStoreValue<DevicePreference>(
     SETTINGS_KEYS.inferenceDevice,
   );
@@ -163,6 +182,7 @@ export async function loadAppSettings(): Promise<AppSettings> {
     timeout: sanitizeTimeout(timeout),
     saveLocation: validatedSaveLocation.error ? defaultSaveLocation : validatedSaveLocation.value,
     inferenceDevice: sanitizeInferenceDevice(inferenceDevice),
+    confidenceThreshold: sanitizeConfidenceThreshold(confidenceThreshold),
   };
 }
 
@@ -184,6 +204,7 @@ export async function saveAppSettings(
     timeout: sanitizeTimeout(settings.timeout),
     saveLocation: validatedSaveLocation.value,
     inferenceDevice: sanitizeInferenceDevice(settings.inferenceDevice),
+    confidenceThreshold: sanitizeConfidenceThreshold(settings.confidenceThreshold),
   };
 
   await setStoreValue(SETTINGS_KEYS.autoStart, sanitizedSettings.autoStart);
@@ -192,6 +213,10 @@ export async function saveAppSettings(
   await setStoreValue(
     SETTINGS_KEYS.inferenceDevice,
     sanitizedSettings.inferenceDevice,
+  );
+  await setStoreValue(
+    SETTINGS_KEYS.confidenceThreshold,
+    sanitizedSettings.confidenceThreshold,
   );
   await saveStore();
 

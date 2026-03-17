@@ -37,6 +37,8 @@ interface TileMeta {
 interface RunInferenceOptions {
   devicePreference: DevicePreference;
   saveLocation?: string | null;
+  confidenceThreshold?: number;
+  onProgress?: (event: InferenceProgressEvent) => void;
 }
 
 export interface InferenceResult {
@@ -45,9 +47,16 @@ export interface InferenceResult {
   deviceUsed: RuntimeDevice;
 }
 
+export interface InferenceProgressEvent {
+  stage: "prepare" | "model" | "infer" | "postprocess" | "complete";
+  progress: number;
+  message: string;
+  details?: string;
+}
+
 const MODEL_URL = "/best.onnx";
 const INPUT_SIZE = 960;
-const CONFIDENCE_THRESHOLD = 0.25;
+const DEFAULT_CONFIDENCE_THRESHOLD = 0.25;
 const IOU_THRESHOLD = 0.45;
 const CLASS_NAMES = ["Odlaw", "Waldo", "Wilma", "Wizard", "woof"];
 export const AUTO_SAVE = false;
@@ -312,7 +321,11 @@ function applyNms(detections: Detection[]): Detection[] {
   return result.sort((left, right) => right.confidence - left.confidence);
 }
 
-function decodeOutput(output: Float32Array, meta: TileMeta): Detection[] {
+function decodeOutput(
+  output: Float32Array,
+  meta: TileMeta,
+  confidenceThreshold: number,
+): Detection[] {
   const stride = output.length / 9;
   const detections: Detection[] = [];
 
@@ -333,7 +346,7 @@ function decodeOutput(output: Float32Array, meta: TileMeta): Detection[] {
       }
     }
 
-    if (classId < 0 || bestScore < CONFIDENCE_THRESHOLD) {
+    if (classId < 0 || bestScore < confidenceThreshold) {
       continue;
     }
 
@@ -368,6 +381,7 @@ async function inferTile(
   tileHeight: number,
   offsetX: number,
   offsetY: number,
+  confidenceThreshold: number,
 ): Promise<Detection[]> {
   const { tensor, meta } = prepareTileTensor(
     source,
@@ -387,18 +401,35 @@ async function inferTile(
     throw new Error("Unexpected ONNX output type.");
   }
 
-  return decodeOutput(raw, meta);
+  return decodeOutput(raw, meta, confidenceThreshold);
 }
 
-async function detect(image: HTMLImageElement, session: ort.InferenceSession) {
+async function detect(
+  image: HTMLImageElement,
+  session: ort.InferenceSession,
+  confidenceThreshold: number,
+  onTileDone?: (completed: number, total: number) => void,
+) {
   const width = image.naturalWidth;
   const height = image.naturalHeight;
 
   if (Math.max(width, height) <= INPUT_SIZE) {
-    return applyNms(await inferTile(session, image, width, height, 0, 0));
+    const detections = await inferTile(
+      session,
+      image,
+      width,
+      height,
+      0,
+      0,
+      confidenceThreshold,
+    );
+    onTileDone?.(1, 1);
+    return applyNms(detections);
   }
 
   const detections: Detection[] = [];
+  const totalTiles = Math.ceil(width / INPUT_SIZE) * Math.ceil(height / INPUT_SIZE);
+  let processedTiles = 0;
 
   for (let top = 0; top < height; top += INPUT_SIZE) {
     for (let left = 0; left < width; left += INPUT_SIZE) {
@@ -424,8 +455,18 @@ async function detect(image: HTMLImageElement, session: ort.InferenceSession) {
       );
 
       detections.push(
-        ...(await inferTile(session, tileCanvas, tileWidth, tileHeight, left, top)),
+        ...(await inferTile(
+          session,
+          tileCanvas,
+          tileWidth,
+          tileHeight,
+          left,
+          top,
+          confidenceThreshold,
+        )),
       );
+      processedTiles += 1;
+      onTileDone?.(processedTiles, totalTiles);
     }
   }
 
@@ -544,14 +585,52 @@ export async function runInference(
   imagePath: string,
   options: RunInferenceOptions,
 ): Promise<InferenceResult> {
+  options.onProgress?.({
+    stage: "prepare",
+    progress: 0.05,
+    message: "Preparing search",
+  });
   const state = await ensureSession(options.devicePreference);
+  options.onProgress?.({
+    stage: "model",
+    progress: 0.18,
+    message: "Model ready",
+    details: state.deviceUsed === "webgpu" ? "Running on GPU" : "Running on CPU",
+  });
   const { image, objectUrl } = await loadImageFromPath(imagePath);
+  const threshold = Number.isFinite(options.confidenceThreshold)
+    ? Math.min(0.99, Math.max(0.01, options.confidenceThreshold ?? DEFAULT_CONFIDENCE_THRESHOLD))
+    : DEFAULT_CONFIDENCE_THRESHOLD;
 
   try {
-    const detections = await detect(image, state.session);
+    const detections = await detect(
+      image,
+      state.session,
+      threshold,
+      (completed, total) => {
+        const ratio = total > 0 ? completed / total : 1;
+        options.onProgress?.({
+          stage: "infer",
+          progress: 0.2 + ratio * 0.68,
+          message: "Scanning crowd regions",
+          details: `${completed}/${total} regions processed`,
+        });
+      },
+    );
+    options.onProgress?.({
+      stage: "postprocess",
+      progress: 0.92,
+      message: "Finalizing detections",
+    });
     const annotatedImagePath = AUTO_SAVE
       ? await saveAnnotatedResult(image, detections, options.saveLocation)
       : "";
+    options.onProgress?.({
+      stage: "complete",
+      progress: 1,
+      message: "Search complete",
+      details: `${detections.length} detection(s)`,
+    });
 
     return {
       detections,
@@ -559,7 +638,9 @@ export async function runInference(
       deviceUsed: state.deviceUsed,
     };
   } finally {
-    URL.revokeObjectURL(objectUrl);
+    if (objectUrl.startsWith("blob:")) {
+      URL.revokeObjectURL(objectUrl);
+    }
   }
 }
 
@@ -572,7 +653,9 @@ export async function saveInferenceResult(
   try {
     return await saveAnnotatedResult(image, detections, saveLocation);
   } finally {
-    URL.revokeObjectURL(objectUrl);
+    if (objectUrl.startsWith("blob:")) {
+      URL.revokeObjectURL(objectUrl);
+    }
   }
 }
 
@@ -580,4 +663,14 @@ export async function resetModel(): Promise<void> {
   sessionState = null;
   sessionPromise = null;
   modelBytesPromise = null;
+}
+
+export function getInferenceRuntimeState(): {
+  modelLoaded: boolean;
+  deviceUsed: RuntimeDevice | null;
+} {
+  return {
+    modelLoaded: sessionState !== null,
+    deviceUsed: sessionState?.deviceUsed ?? null,
+  };
 }

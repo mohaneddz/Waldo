@@ -1,38 +1,68 @@
-@import "tailwindcss";
+:root {
+  --ink-900: #1f1a15;
+  --ink-700: #3e3228;
+  --ink-500: #6f5f4d;
+  --ink-300: #97826a;
+  --paper-base: #f7efdf;
+  --paper-soft: #faf4e7;
+  --paper-note: #fbf2df;
+  --paper-deep: #e9dbc7;
+  --line-blue: #78a9c0;
+  --line-red: #c97365;
+  --accent-red: #b5473a;
+  --accent-red-dark: #7f302b;
+  --accent-blue: #2e82b5;
+  --accent-blue-dark: #205b7c;
+  --accent-gold: #b89354;
+  --ok: #3d7d42;
+  --warn: #b04d3d;
+  --shadow-soft: 0 8px 20px rgba(43, 30, 22, 0.18);
+  --shadow-hard: 0 12px 24px rgba(43, 30, 22, 0.28);
+}
 
-@theme {
-    --color-primary: #00a0eb;
-    --color-primary-light: #54c8fe;
-    --color-primary-dark: #0077b3;
+* {
+  box-sizing: border-box;
+}
 
-    --color-secondary: #863146;
-    --color-secondary-light: #b04a6c;
-    --color-secondary-dark: #5a1f2c;
+html,
+body,
+#root {
+  height: 100%;
+}
 
-    --color-text: #808080;
-    --color-text-light: #ffffff;
-    --color-text-secondary: #666666;
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
 
-    --color-background: #f0f0f0;
-    --color-background-light: #ffffff;
-    --color-background-dark: #333333;
+body {
+  color: var(--ink-900);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(255, 255, 255, 0.8)),
+    url("/textures/sky-wash.png") top center / cover no-repeat,
+    #d2edf2;
+  font-family: "Palatino Linotype", "Book Antiqua", Palatino, Georgia, serif;
+  user-select: none;
+  overflow: hidden;
+}
 
-    --color-border: #cccccc;
-    --color-border-light: #e0e0e0;
-    --color-border-dark: #999999;
+h1,
+h2,
+h3,
+p,
+small,
+span,
+label,
+li,
+a,
+input,
+select,
+button {
+  font-family: inherit;
+}
 
-    --color-accent: #00acf0;
-    --color-accent-light: #54c8fe;
-    --color-accent-dark: #0077b3;
-
-    --border-radius: 8px;
-    --border-radius-small: 4px;
-    --border-radius-large: 12px;
-
-    --shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    --shadow-hover: 0 4px 8px rgba(0, 0, 0, 0.2);
-
-    --transition: all 0.3s ease-in-out;
-    --transition-fast: all 0.2s ease-in-out;
-
+a {
+  color: inherit;
+  text-decoration: none;
 }

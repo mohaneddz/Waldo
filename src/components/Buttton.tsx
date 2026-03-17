@@ -6,7 +6,7 @@ interface Props {
   class?: string;
   title?: string;
   disabled?: boolean;
-  onClick?: () => void;
+  onClick?: (event: MouseEvent) => void;
 }
 
 export default function Button(props: Props) {
@@ -15,27 +15,29 @@ export default function Button(props: Props) {
   const getClass = () => {
     switch (variant) {
       case 'primary':
-        return 'rounded-md px-4 py-2 bg-secondary text-white border ';
+        return 'v-btn v-btn-primary';
       case 'secondary':
-        return 'rounded-md px-4 py-2 bg-primary text-white border ';
+        return 'v-btn v-btn-secondary';
       case 'basic':
-        return 'border ';
-      //   case 'danger':
-      //     return '';
+        return 'v-btn v-btn-basic';
+      case 'danger':
+        return 'v-btn v-btn-danger';
       case 'ghost':
-        return 'rounded-md px-4 py-2 bg-transparent text-white border ';
+        return 'v-btn v-btn-ghost';
       default:
-        return '';
+        return 'v-btn v-btn-basic';
     }
   };
 
   return (
-    <div
-      class={`click inline-flex items-center justify-center font-bold text-center leading-none ` + getClass() + (props.disabled ? ' opacity-50 cursor-not-allowed ' : '') + props.class}
-      onClick={!props.disabled ? onClick : undefined}
+    <button
+      type="button"
+      class={`${getClass()} ${props.class ?? ''}`}
+      disabled={props.disabled}
+      onClick={onClick}
       title={props.title}
     >
       {props.children}
-    </div>
+    </button>
   );
 };

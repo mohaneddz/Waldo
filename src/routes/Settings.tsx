@@ -1,150 +1,130 @@
+import { Show, createSignal } from "solid-js";
+import Folder from "lucide-solid/icons/folder";
+
 import Button from "@/components/Buttton";
 import useSettings from "@/hooks/useSettings";
-import NumberInput from "@/components/NumberInput";
-import TextInput from "@/components/TextInput";
 
-import { Folder } from "lucide-solid";
-import { Show, createSignal } from "solid-js";
-
-export default function Settings() {
+export default function SettingsRoute() {
   const {
-    handleGoBack: goBackOriginal,
-    saveSettings,
     autoStart,
-    setAutoStart,
-    timeoutInput,
-    setTimeoutInput,
-    saveLocation,
-    setSaveLocation,
-    inferenceDevice,
-    setInferenceDevice,
-    pickSaveLocation,
-    loading,
+    confidenceThresholdInput,
     errorMessage,
+    inferenceDevice,
+    loading,
+    pickSaveLocation,
+    saveLocation,
+    saveSettings,
+    setAutoStart,
+    setConfidenceThresholdInput,
+    setInferenceDevice,
+    setSaveLocation,
+    setTimeoutInput,
     successMessage,
+    timeoutInput,
   } = useSettings();
 
   const [saving, setSaving] = createSignal(false);
-  const [goingBack, setGoingBack] = createSignal(false);
 
-  const handleGoBack = () => {
-    setGoingBack(true);
-    window.setTimeout(() => {
-      goBackOriginal();
-    }, 300); // matches exit animation
-  };
-
-  const handleSave = async () => {
+  async function handleSave() {
     setSaving(true);
     try {
       await saveSettings();
     } finally {
       setSaving(false);
     }
-  };
+  }
 
   return (
-    <section
-      class={`center min-h-screen ${goingBack() ? "animate-fadeOutScale" : "animate-fadeInScale"
-        }`}
-    >
-      <div class="bg-primary-dark min-w-[40vw] min-h-[40vw] border rounded-lg center flex-col p-8">
-        <h1 class="text-7xl font-bold text-center my-12">Settings</h1>
+    <section class="page settings-page">
+      <header class="page-header">
+        <h1>Settings</h1>
+      </header>
 
-        <div class="center flex-col gap-12 h-full w-full max-w-[30vw]">
-          {/* AutoStart as Select */}
-          <div class="flex justify-between items-center w-full">
-            <label for="autoStart">Preload model</label>
+      <div class="settings-layout">
+        <div class="settings-grid vintage-paper">
+          <label>
+            Preload model on launch
             <select
-              id="autoStart"
-              class="w-50 text-sm pl-4 pr-4 py-2 bg-primary-light/40 border border-border-light-2 rounded-md text-white placeholder-white/70 focus:outline-none focus:border-accent"
+              class="v-input"
               value={autoStart() ? "enabled" : "disabled"}
-              onChange={(e) => setAutoStart(e.currentTarget.value === "enabled")}
+              onChange={(event) => setAutoStart(event.currentTarget.value === "enabled")}
               disabled={loading() || saving()}
             >
               <option value="enabled">Enabled</option>
               <option value="disabled">Disabled</option>
             </select>
-          </div>
+          </label>
 
-          <div class="flex justify-between items-center w-full">
-            <label for="inferenceDevice">Inference device</label>
+          <label>
+            Inference device
             <select
-              id="inferenceDevice"
-              class="w-50 text-sm pl-4 pr-4 py-2 bg-primary-light/40 border border-border-light-2 rounded-md text-white placeholder-white/70 focus:outline-none focus:border-accent"
+              class="v-input"
               value={inferenceDevice()}
-              onChange={(e) => setInferenceDevice(e.currentTarget.value as "auto" | "gpu" | "cpu")}
+              onChange={(event) =>
+                setInferenceDevice(event.currentTarget.value as "auto" | "gpu" | "cpu")
+              }
               disabled={loading() || saving()}
             >
               <option value="auto">Auto (GPU if available)</option>
               <option value="gpu">GPU only</option>
               <option value="cpu">CPU only</option>
             </select>
-          </div>
+          </label>
 
-          {/* Timeout */}
-          <div class="flex justify-between items-center w-full">
-            <label for="timeout">Timeout</label>
-            <NumberInput
-              number={timeoutInput()}
-              setNumber={setTimeoutInput}
-              id="timeout"
-              placeholder="Enter timeout in seconds"
-              readonly={loading() || saving()}
+          <label>
+            Timeout (seconds)
+            <input
+              class="v-input"
+              value={timeoutInput()}
+              type="number"
+              min="1"
+              max="600"
+              step="1"
+              onInput={(event) => setTimeoutInput(event.currentTarget.value)}
             />
+          </label>
+
+          <label>
+            Confidence threshold
+            <input
+              class="v-input"
+              value={confidenceThresholdInput()}
+              type="number"
+              min="0.05"
+              max="0.95"
+              step="0.01"
+              onInput={(event) => setConfidenceThresholdInput(event.currentTarget.value)}
+            />
+          </label>
+
+          <label class="full-row">
+            Save location
+            <div class="row-inline">
+              <input
+                class="v-input"
+                value={saveLocation()}
+                onInput={(event) => setSaveLocation(event.currentTarget.value)}
+              />
+              <Button variant="ghost" onClick={pickSaveLocation}>
+                <Folder size={16} /> Browse
+              </Button>
+            </div>
+          </label>
+
+          <div class="full-row row-inline">
+            <Button variant="secondary" onClick={handleSave} disabled={loading() || saving()}>
+              {saving() ? "Saving..." : "Save Settings"}
+            </Button>
           </div>
 
-          {/* Save Location */}
-          {/* <div class="flex justify-between items-start w-full gap-4">
-            <label for="saveLocation">Save location</label>
-            <div class="flex flex-1 space-y-3 h-min gap-4">
-              <TextInput
-                class="w-full"
-                text={saveLocation()}
-                setText={setSaveLocation}
-                id="saveLocation"
-                placeholder="Choose a save location"
-                readonly={true}
-              />
-                  <Button
-                  variant="ghost"
-                  class="h-[42px] w-[50px] px-0 py-0 shrink-0"
-                  onClick={pickSaveLocation}
-                  // disabled={loading() || saving()}
-                  >
-                  <Folder class="h-5 w-5" />
-                  </Button>
-            </div>
-          </div> */}
-        </div>
-
-        <div class="mt-6 min-h-6 text-center">
-          <Show when={errorMessage()}>
-            <p class="text-sm text-red-300">{errorMessage()}</p>
-          </Show>
-          <Show when={!errorMessage() && successMessage()}>
-            <p class="text-sm text-emerald-300">{successMessage()}</p>
-          </Show>
-        </div>
-
-        {/* Buttons */}
-        <div class="grid grid-cols-2 justify-stretch gap-4 my-12 w-full">
-          <Button class="w-full " variant="ghost" onClick={handleGoBack} disabled={saving()}>
-            Go Back
-          </Button>
-          <Button class="w-full" variant="primary" onClick={handleSave} disabled={saving() || loading()}>
-            {saving() ? (
-              <span class="flex items-center justify-center gap-2">
-                <span
-                  class="inline-block w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin"
-                  aria-hidden="true"
-                />
-                Saving...
-              </span>
-            ) : (
-              "Save"
-            )}
-          </Button>
+          <div class="full-row">
+            <Show when={errorMessage()}>
+              <p class="error-text">{errorMessage()}</p>
+            </Show>
+            <Show when={!errorMessage() && successMessage()}>
+              <p class="ok-text">{successMessage()}</p>
+            </Show>
+          </div>
         </div>
       </div>
     </section>

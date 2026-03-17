@@ -9,7 +9,7 @@ function App() {
   return (
     <Router
       root={(props) => (
-        <section class="h-screen w-screen overflow-hidden flex">
+        <section class="app-root">
           <Titlebar />
           {props.children}
         </section>

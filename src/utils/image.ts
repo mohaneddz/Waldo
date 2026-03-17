@@ -14,6 +14,10 @@ function getMimeType(path: string): string {
 }
 
 export async function createObjectUrlFromPath(path: string): Promise<string> {
+  if (path.startsWith("/") || path.startsWith("http://") || path.startsWith("https://")) {
+    return path;
+  }
+
   const bytes = await readFile(path);
   const blob = new Blob([bytes], { type: getMimeType(path) });
   return URL.createObjectURL(blob);

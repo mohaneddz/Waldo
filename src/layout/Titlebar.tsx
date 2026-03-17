@@ -1,14 +1,26 @@
 import { createSignal, onMount, Show } from 'solid-js';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { listen } from '@tauri-apps/api/event';
+import Minus from 'lucide-solid/icons/minus';
+import Maximize2 from 'lucide-solid/icons/maximize-2';
+import Minimize2 from 'lucide-solid/icons/minimize-2';
+import X from 'lucide-solid/icons/x';
 
 export default function Titlebar() {
-  const appWindow = getCurrentWindow();
+  let appWindow: ReturnType<typeof getCurrentWindow> | null = null;
+  try {
+    appWindow = getCurrentWindow();
+  } catch {
+    appWindow = null;
+  }
 
   const [isFullscreen, setIsFullscreen] = createSignal(false);
   const [isMaximized, setIsMaximized] = createSignal(false);
 
   const toggleFullscreen = async () => {
+    if (!appWindow) {
+      return;
+    }
     const fullscreen = await appWindow.isFullscreen();
     const maximized = await appWindow.isMaximized();
 
@@ -22,6 +34,9 @@ export default function Titlebar() {
 
   // Sync state on mount + listen to window events
   onMount(async () => {
+    if (!appWindow) {
+      return;
+    }
     setIsFullscreen(await appWindow.isFullscreen());
     setIsMaximized(await appWindow.isMaximized());
 
@@ -47,11 +62,15 @@ export default function Titlebar() {
     }
   });
 
+  if (!appWindow) {
+    return <div class="titlebar" />;
+  }
+
   return (
     <div data-tauri-drag-region class="titlebar">
       <Show when={!isFullscreen()}>
         <button onClick={() => appWindow.minimize()} class="titlebar-button" id="titlebar-minimize">
-          <img src="https://api.iconify.design/mdi:window-minimize.svg" alt="minimize" />
+          <Minus size={14} />
         </button>
 
         <button
@@ -64,15 +83,15 @@ export default function Titlebar() {
           id="titlebar-maximize"
         >
           <Show when={!isMaximized()}>
-            <img src="https://api.iconify.design/mdi:window-maximize.svg" alt="maximize" />
+            <Maximize2 size={13} />
           </Show>
           <Show when={isMaximized()}>
-            <img src="https://api.iconify.design/mdi:window-restore.svg" alt="restore" />
+            <Minimize2 size={13} />
           </Show>
         </button>
 
         <button onClick={() => appWindow.close()} class="titlebar-button" id="titlebar-close">
-          <img src="https://api.iconify.design/mdi:close.svg" alt="close" />
+          <X size={14} />
         </button>
       </Show>
     </div>

@@ -3,8 +3,11 @@ import { createSignal, onMount } from "solid-js";
 
 import type { DevicePreference } from "@/services/inference";
 import {
+  DEFAULT_CONFIDENCE_THRESHOLD,
   DEFAULT_TIMEOUT_SECONDS,
+  MAX_CONFIDENCE_THRESHOLD,
   MAX_TIMEOUT_SECONDS,
+  MIN_CONFIDENCE_THRESHOLD,
   MIN_TIMEOUT_SECONDS,
   loadAppSettings,
   saveAppSettings,
@@ -17,6 +20,9 @@ export default function useSettings() {
     DEFAULT_TIMEOUT_SECONDS.toString(),
   );
   const [saveLocation, setSaveLocation] = createSignal("");
+  const [confidenceThresholdInput, setConfidenceThresholdInput] = createSignal(
+    DEFAULT_CONFIDENCE_THRESHOLD.toString(),
+  );
   const [inferenceDevice, setInferenceDevice] =
     createSignal<DevicePreference>("auto");
   const [loading, setLoading] = createSignal(true);
@@ -35,6 +41,7 @@ export default function useSettings() {
       setTimeoutInput(settings.timeout.toString());
       setSaveLocation(settings.saveLocation);
       setInferenceDevice(settings.inferenceDevice);
+      setConfidenceThresholdInput(settings.confidenceThreshold.toString());
     } catch (error) {
       console.error("Failed to load settings:", error);
       setErrorMessage("Failed to load settings.");
@@ -91,18 +98,36 @@ export default function useSettings() {
       return false;
     }
 
+    const parsedConfidence = Number(confidenceThresholdInput().trim());
+    if (!Number.isFinite(parsedConfidence)) {
+      setErrorMessage("Confidence threshold must be a number.");
+      return false;
+    }
+
+    if (
+      parsedConfidence < MIN_CONFIDENCE_THRESHOLD ||
+      parsedConfidence > MAX_CONFIDENCE_THRESHOLD
+    ) {
+      setErrorMessage(
+        `Confidence threshold must be between ${MIN_CONFIDENCE_THRESHOLD} and ${MAX_CONFIDENCE_THRESHOLD}.`,
+      );
+      return false;
+    }
+
     try {
       const settings = await saveAppSettings({
         autoStart: autoStart(),
         timeout: parsedTimeout,
         saveLocation: validatedLocation.value,
         inferenceDevice: inferenceDevice(),
+        confidenceThreshold: Number(parsedConfidence.toFixed(2)),
       });
 
       setAutoStart(settings.autoStart);
       setTimeoutInput(settings.timeout.toString());
       setSaveLocation(settings.saveLocation);
       setInferenceDevice(settings.inferenceDevice);
+      setConfidenceThresholdInput(settings.confidenceThreshold.toString());
       setSuccessMessage("Settings saved.");
       return true;
     } catch (error) {
@@ -126,8 +151,10 @@ export default function useSettings() {
     setAutoStart,
     setInferenceDevice,
     setSaveLocation,
+    setConfidenceThresholdInput,
     setTimeoutInput,
     successMessage,
     timeoutInput,
+    confidenceThresholdInput,
   };
 }
